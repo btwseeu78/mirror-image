@@ -1,10 +1,30 @@
 # mirror-image
-// TODO(user): Add simple overview of use/purpose
+ Use this project to create a mirror image of the given image.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
-
+- This project is a Kubernetes operator that creates a mirror image of the given image.
 ## Getting Started
+```yaml
+apiVersion: oci.platform.io/v1beta1
+kind: Replication
+metadata:
+  labels:
+    app.kubernetes.io/name: mirror-image
+    app.kubernetes.io/managed-by: kustomize
+  name: replication-sample-second
+spec:
+  destination:
+    repoUrl: "linuxarpan/testpush"
+    secretName: "regcred"
+  source:
+    repoUrl: "linuxarpan/testpush"
+    secretName: "regcred"
+  pollingInterval: "2m"
+  filterCriteria: ".*"
+  overWrite: false
+  maxChunkPerCount: 5
+```
+
 
 ### Prerequisites
 - go version v1.22.0+
@@ -88,6 +108,10 @@ Users can just run kubectl apply -f <URL for YAML BUNDLE> to install the project
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/<org>/mirror-image/<tag or branch>/dist/install.yaml
 ```
+
+
+
+
 
 ## Contributing
 // TODO(user): Add detailed information on how you would like others to contribute to this project
