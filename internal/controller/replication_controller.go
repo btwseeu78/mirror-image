@@ -18,16 +18,19 @@ package controller
 
 import (
 	"context"
+	ociv1beta1 "github.com/btwseeu78/mirror-image/api/v1beta1"
+	"github.com/btwseeu78/mirror-image/utility"
 	"github.com/go-logr/logr"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/authn/k8schain"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"time"
-
-	ociv1beta1 "github.com/btwseeu78/mirror-image/api/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"time"
 )
 
 // ReplicationReconciler reconciles a Replication object
@@ -84,8 +87,42 @@ func (r *ReplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		nextSyncTime := oci.Status.LastSyncTime.Add(duration)
 		if currentTime.After(nextSyncTime) {
 			log.Info("Syncing Image")
+			// Get the required details
+			sRepo, err := utility.NewRepository(oci.Spec.SourceImage.RepoUrl)
+			if err != nil {
+				log.Error(err, "unable to create source repository")
+				return ctrl.Result{}, err
+			}
+
+			//dRepo, err := utility.NewRepository(oci.Spec.DestinationImage.RepoUrl)
+			//if err != nil {
+			//	log.Error(err, "unable to create destination repository")
+			//	return ctrl.Result{}, err
+			//}
+
+			// Get The Keychain Information
+			sSecret := oci.Spec.SourceImage.SecretName
+			dSecret := oci.Spec.DestinationImage.SecretName
+
+			// get the actual secret
+			kc, err := r.GenerateK8sChain(ctx, sSecret, dSecret, oci.Namespace)
+			if err != nil {
+				log.Error(err, "unable to create keychain")
+				return ctrl.Result{}, err
+			}
+
+			ListRepositoryTags, err := utility.ListRepositoryTags(sRepo, kc, oci.Spec.FilterCriteria)
+			if err != nil {
+				log.Error(err, "unable to list source repository tags")
+				return ctrl.Result{}, err
+			}
+			if len(ListRepositoryTags) == 0 {
+				log.Info("No tags found in the source repository")
+			}
+			log.Info("Source Repository Tags", "Tags", ListRepositoryTags)
+
 			oci.Status.LastSyncTime = currentTime
-			err := r.Status().Update(ctx, oci)
+			err = r.Status().Update(ctx, oci)
 			if err != nil {
 				log.Error(err, "unable to update status")
 				return ctrl.Result{}, err
@@ -113,4 +150,40 @@ func (r *ReplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&ociv1beta1.Replication{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
+}
+
+func (r *ReplicationReconciler) GenerateK8sChain(ctx context.Context, sSecret, dSecret string, secretNamespace string) (authn.Keychain, error) {
+	// get the actual secret
+	sPullSecret := &v1.Secret{}
+	dPullSecret := &v1.Secret{}
+	pullSecretCombined := make([]v1.Secret, 0)
+	if sSecret == "" && dSecret == "" {
+		return nil, nil
+	}
+	if sSecret != "" {
+		err := r.Get(ctx, client.ObjectKey{Namespace: secretNamespace, Name: sSecret}, sPullSecret)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if dSecret != "" {
+		err := r.Get(ctx, client.ObjectKey{Namespace: secretNamespace, Name: dSecret}, dPullSecret)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if dSecret == "" {
+		pullSecretCombined = append(pullSecretCombined, *sPullSecret)
+	} else if sSecret == "" {
+		pullSecretCombined = append(pullSecretCombined, *dPullSecret)
+	} else {
+
+		pullSecretCombined = []v1.Secret{*sPullSecret, *dPullSecret}
+	}
+	// create keychain out of it
+	sKeyChain, err := k8schain.NewFromPullSecrets(ctx, pullSecretCombined)
+	if err != nil {
+		return nil, err
+	}
+	return sKeyChain, nil
 }

@@ -22,7 +22,7 @@ import (
 
 type Source struct {
 	RepoUrl    string `json:"repoUrl"`
-	SecretName string `json:"secretName"`
+	SecretName string `json:"secretName,omitempty"`
 }
 
 type SyncStatus string

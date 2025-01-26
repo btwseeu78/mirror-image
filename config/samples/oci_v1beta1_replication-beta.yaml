@@ -9,10 +9,10 @@ spec:
   # TODO(user): Add fields here
   destination:
     repoUrl: "usdo.ocir.io/tenancy/repo"
-    secretName: "artifact-registry"
+    #secretName: "artifact-registry"
   source:
-    repoUrl: "usdo.ocir.io/tenancy/repo"
-    secretName: "artifact-registry"
+    repoUrl: "linuxarpan/function"
+    #secretName: "artifact-registry"
   pollingInterval: "1m"
   filterCriteria: ".*"
 #    overWrite: false

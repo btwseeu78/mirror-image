@@ -8,11 +8,11 @@ metadata:
 spec:
   # TODO(user): Add fields here
   destination:
-    repoUrl: "usdo.ocir.io/tenancy/repo"
-    secretName: "artifact-registry"
+    repoUrl: "linuxarpan/testpush"
+    secretName: "regcred"
   source:
-    repoUrl: "usdo.ocir.io/tenancy/repo"
-    secretName: "artifact-registry"
+    repoUrl: "linuxarpan/testpush"
+    secretName: "regcred"
   pollingInterval: "2m"
   filterCriteria: ".*"
 #    overWrite: false

@@ -54,7 +54,6 @@ spec:
                     type: string
                 required:
                 - repoUrl
-                - secretName
                 type: object
               filterCriteria:
                 description: Use Regular Expression to filter the image
@@ -79,7 +78,6 @@ spec:
                     type: string
                 required:
                 - repoUrl
-                - secretName
                 type: object
             required:
             - destination
