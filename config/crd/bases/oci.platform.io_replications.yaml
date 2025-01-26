@@ -1,0 +1,113 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: replications.oci.platform.io
+spec:
+  group: oci.platform.io
+  names:
+    kind: Replication
+    listKind: ReplicationList
+    plural: replications
+    singular: replication
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.lastSyncTime
+      name: LastSyncTime
+      type: string
+    - jsonPath: .status.lastSyncStatus
+      name: LastSyncStatus
+      type: string
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: Replication is the Schema for the replications API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ReplicationSpec defines the desired state of Replication
+            properties:
+              destination:
+                properties:
+                  repoUrl:
+                    type: string
+                  secretName:
+                    type: string
+                required:
+                - repoUrl
+                - secretName
+                type: object
+              filterCriteria:
+                description: Use Regular Expression to filter the image
+                type: string
+              maxChunkPerCount:
+                default: 5
+                type: integer
+              overWrite:
+                default: false
+                type: boolean
+              pollingInterval:
+                default: 5h
+                type: string
+              source:
+                description: |-
+                  INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+                  Important: Run "make" to regenerate code after modifying this file
+                properties:
+                  repoUrl:
+                    type: string
+                  secretName:
+                    type: string
+                required:
+                - repoUrl
+                - secretName
+                type: object
+            required:
+            - destination
+            - source
+            type: object
+          status:
+            description: ReplicationStatus defines the observed state of Replication
+            properties:
+              lastSyncStatus:
+                type: string
+              lastSyncTime:
+                description: |-
+                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+                  Important: Run "make" to regenerate code after modifying this file
+                format: date-time
+                type: string
+              totalFailed:
+                default: 0
+                type: integer
+              totalSynced:
+                default: 0
+                type: integer
+            required:
+            - lastSyncTime
+            - totalFailed
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

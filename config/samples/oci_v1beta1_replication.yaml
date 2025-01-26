@@ -1,0 +1,20 @@
+apiVersion: oci.platform.io/v1beta1
+kind: Replication
+metadata:
+  labels:
+    app.kubernetes.io/name: mirror-image
+    app.kubernetes.io/managed-by: kustomize
+  name: replication-sample-second
+spec:
+  # TODO(user): Add fields here
+  destination:
+    repoUrl: "usdo.ocir.io/tenancy/repo"
+    secretName: "artifact-registry"
+  source:
+    repoUrl: "usdo.ocir.io/tenancy/repo"
+    secretName: "artifact-registry"
+  pollingInterval: "2m"
+  filterCriteria: ".*"
+#    overWrite: false
+#    maxChunkPerCount: 5
+
