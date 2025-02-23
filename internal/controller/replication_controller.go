@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	ociv1beta1 "github.com/btwseeu78/mirror-image/api/v1beta1"
 	"github.com/btwseeu78/mirror-image/utility"
 	"github.com/go-logr/logr"
@@ -80,6 +81,29 @@ func (r *ReplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		log.Error(err, "unable to parse duration")
 		return ctrl.Result{}, err
 	}
+	// Get the required details
+	sRepo, err := utility.NewRepository(oci.Spec.SourceImage.RepoUrl)
+	if err != nil {
+		log.Error(err, "unable to create source repository")
+		return ctrl.Result{}, err
+	}
+
+	dRepo, err := utility.NewRepository(oci.Spec.DestinationImage.RepoUrl)
+	if err != nil {
+		log.Error(err, "unable to create destination repository")
+		return ctrl.Result{}, err
+	}
+	// Get The Keychain Information
+	sSecret := oci.Spec.SourceImage.SecretName
+	dSecret := oci.Spec.DestinationImage.SecretName
+
+	// get the actual secret
+	kc, err := r.GenerateK8sChain(ctx, sSecret, dSecret, oci.Namespace)
+	if err != nil {
+		log.Error(err, "unable to create keychain")
+		return ctrl.Result{}, err
+	}
+
 	// Get the current time
 	currentTime := metav1.Now()
 	if !oci.Status.LastSyncTime.IsZero() {
@@ -87,39 +111,33 @@ func (r *ReplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		nextSyncTime := oci.Status.LastSyncTime.Add(duration)
 		if currentTime.After(nextSyncTime) {
 			log.Info("Syncing Image")
-			// Get the required details
-			sRepo, err := utility.NewRepository(oci.Spec.SourceImage.RepoUrl)
-			if err != nil {
-				log.Error(err, "unable to create source repository")
-				return ctrl.Result{}, err
-			}
 
-			//dRepo, err := utility.NewRepository(oci.Spec.DestinationImage.RepoUrl)
-			//if err != nil {
-			//	log.Error(err, "unable to create destination repository")
-			//	return ctrl.Result{}, err
-			//}
-
-			// Get The Keychain Information
-			sSecret := oci.Spec.SourceImage.SecretName
-			dSecret := oci.Spec.DestinationImage.SecretName
-
-			// get the actual secret
-			kc, err := r.GenerateK8sChain(ctx, sSecret, dSecret, oci.Namespace)
-			if err != nil {
-				log.Error(err, "unable to create keychain")
-				return ctrl.Result{}, err
-			}
-
-			ListRepositoryTags, err := utility.ListRepositoryTags(sRepo, kc, oci.Spec.FilterCriteria)
+			ListSourceRepositoryTags, err := utility.ListRepositoryTags(sRepo, kc, oci.Spec.FilterCriteria)
 			if err != nil {
 				log.Error(err, "unable to list source repository tags")
 				return ctrl.Result{}, err
 			}
-			if len(ListRepositoryTags) == 0 {
+			if len(ListSourceRepositoryTags) == 0 {
 				log.Info("No tags found in the source repository")
+				return ctrl.Result{RequeueAfter: nextSyncTime.Sub(currentTime.Time)}, nil
 			}
-			log.Info("Source Repository Tags", "Tags", ListRepositoryTags)
+			log.Info("Source Repository Tags", "Tags", ListSourceRepositoryTags)
+
+			ListDestintaionRepositoryTags, err := utility.ListRepositoryTags(dRepo, kc, oci.Spec.FilterCriteria)
+			if err != nil {
+				log.Error(err, "unable to list destination repository tags")
+				return ctrl.Result{}, err
+			}
+
+			syncTags, err := utility.GetMissingTags(ListSourceRepositoryTags, ListDestintaionRepositoryTags, oci.Spec.MaxChunkPerCount)
+			if err != nil {
+				log.Error(err, "unable to get sync tags")
+				return ctrl.Result{}, err
+			}
+			for _, tag := range *syncTags {
+				image := fmt.Sprintf("%s:%s", oci.Spec.SourceImage.RepoUrl, tag)
+				log.Info("sync tags", "image", image)
+			}
 
 			oci.Status.LastSyncTime = currentTime
 			err = r.Status().Update(ctx, oci)
@@ -135,6 +153,32 @@ func (r *ReplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	log.Info("Sync in progress curr time")
 	oci.Status.LastSyncTime = currentTime
+	ListSourceRepositoryTags, err := utility.ListRepositoryTags(sRepo, kc, oci.Spec.FilterCriteria)
+	if err != nil {
+		log.Error(err, "unable to list source repository tags")
+		return ctrl.Result{}, err
+	}
+	if len(ListSourceRepositoryTags) == 0 {
+		log.Info("No tags found in the source repository")
+		return ctrl.Result{RequeueAfter: duration}, nil
+	}
+	log.Info("Source Repository Tags", "Tags", ListSourceRepositoryTags)
+
+	ListDestintaionRepositoryTags, err := utility.ListRepositoryTags(dRepo, kc, oci.Spec.FilterCriteria)
+	if err != nil {
+		log.Error(err, "unable to list destination repository tags")
+		return ctrl.Result{}, err
+	}
+
+	syncTags, err := utility.GetMissingTags(ListSourceRepositoryTags, ListDestintaionRepositoryTags, oci.Spec.MaxChunkPerCount)
+	if err != nil {
+		log.Error(err, "unable to get sync tags")
+		return ctrl.Result{}, err
+	}
+	for _, tag := range *syncTags {
+		image := fmt.Sprintf("%s:%s", oci.Spec.SourceImage.RepoUrl, tag)
+		log.Info("sync tags", "image", image)
+	}
 	err = r.Status().Update(ctx, oci)
 
 	if err != nil {

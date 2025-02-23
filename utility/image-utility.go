@@ -1,7 +1,7 @@
 package utility
 
 import (
-	"fmt"
+	"github.com/blang/semver/v4"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -45,31 +45,8 @@ func ListRepositoryTags(repo name.Repository, kc authn.Keychain, filter string) 
 	return filteredTags, nil
 }
 
-func SyncTags(sourceTags, destTags []string, chunkSize int) []string {
-	// Sort tags in descending order
-	sort.Sort(sort.Reverse(sort.StringSlice(sourceTags)))
-	// Sort tags in descending order
-	sort.Sort(sort.Reverse(sort.StringSlice(destTags)))
-	var syncTags []string
-	if len(sourceTags) < 5 {
-		fmt.Println("Less than 5 tags found in the repository")
-		for i := range sourceTags {
-			if !contains(destTags, sourceTags[i]) {
-				syncTags = append(syncTags, sourceTags[i])
-			}
-		}
-	} else {
-		for i := range sourceTags[:5] {
-			if !contains(destTags, sourceTags[i]) {
-				syncTags = append(syncTags, sourceTags[i])
-			}
-		}
-	}
-	return syncTags
-}
-
 // Pull image from repository
-func PullImage(imageName string, kc authn.Keychain) (v1.Image, error) {
+func PullAndPushImage(imageName, destname string, kc authn.Keychain) (v1.Image, error) {
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		return nil, err
@@ -86,14 +63,49 @@ func PullImage(imageName string, kc authn.Keychain) (v1.Image, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Push the image to the destination repository
 
 	return img, nil
 }
 
-// contains checks if a slice contains a specific element
-func contains(slice []string, element string) bool {
-	for _, item := range slice {
-		if item == element {
+// Get the tags need to  be synced
+func GetMissingTags(sourceTags, destTags []string, limit int) (*[]string, error) {
+	// Sort tags in descending order
+	//sort.Sort(sort.Reverse(sort.StringSlice(sourceTags)))
+	// Sort tags in descending order
+	//sort.Sort(sort.Reverse(sort.StringSlice(destTags)))
+	var syncTags []string
+	for i := range sourceTags {
+		if !contains(destTags, sourceTags[i]) {
+			syncTags = append(syncTags, sourceTags[i])
+		}
+	}
+	var semverTags []semver.Version
+	for _, tag := range syncTags {
+		v, err := semver.ParseTolerant(tag)
+		if err == nil {
+			semverTags = append(semverTags, v)
+		}
+	}
+	sort.Slice(semverTags, func(i, j int) bool {
+		return semverTags[i].GT(semverTags[j])
+	})
+
+	// Convert sorted semver tags back to string
+	sortedTags := make([]string, len(semverTags))
+	for i, v := range semverTags {
+		sortedTags[i] = v.String()
+	}
+	if limit > 0 && limit < len(sortedTags) {
+		sortedTags = sortedTags[:limit]
+	}
+
+	return &sortedTags, nil
+}
+
+func contains(tags []string, s string) bool {
+	for _, t := range tags {
+		if t == s {
 			return true
 		}
 	}
